@@ -38,6 +38,6 @@ class LoginApi:
             url=api_config.LOGIN,
             method="POST",
             headers={"Content-Type": "application/json"},
-            data={"email": credentials.username, "password": credentials.password},
+            data={"username": credentials.username, "password": credentials.password},
         )
         return self._client.send(options)

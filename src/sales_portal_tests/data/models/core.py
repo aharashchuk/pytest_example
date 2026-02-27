@@ -37,4 +37,4 @@ class CaseApi:
     title: str
     expected_status: StatusCodes
     expected_error_message: str | None
-    is_success: bool = True
+    is_success: bool | None = True

@@ -38,7 +38,7 @@ class NotificationsApi:
         )
         return self._client.send(options)
 
-    @step("PATCH /api/notifications/{id}/read")
+    @step("PATCH /api/notifications/{notification_id}/read")
     def mark_as_read(self, notification_id: str, token: str) -> Response[object | None]:
         """Mark a single notification as read.
 

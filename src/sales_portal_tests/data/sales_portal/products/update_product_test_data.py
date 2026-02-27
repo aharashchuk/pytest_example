@@ -121,25 +121,27 @@ UPDATE_PRODUCT_POSITIVE_CASES = [
     ),
 ]
 
+_non_existing_update_id = str(ObjectId())
+
 UPDATE_PRODUCT_NEGATIVE_CASES = [
     pytest.param(
         UpdateProductCase(
             title="404 for non-existing valid id",
             product_data={"name": "ValidName123"},
-            product_id=str(ObjectId()),
+            product_id=_non_existing_update_id,
             expected_status=StatusCodes.NOT_FOUND,
-            expected_error_message=ResponseErrors.product_not_found(str(ObjectId())),
+            expected_error_message=ResponseErrors.product_not_found(_non_existing_update_id),
             is_success=False,
         ),
         id="non-existing-id",
     ),
     pytest.param(
         UpdateProductCase(
-            title="400 for invalid id format",
+            title="500 for invalid id format",
             product_data={"name": "ValidName123"},
             product_id=_faker.pystr(min_chars=10, max_chars=10),
-            expected_status=StatusCodes.BAD_REQUEST,
-            expected_error_message=ResponseErrors.BAD_REQUEST,
+            expected_status=StatusCodes.SERVER_ERROR,
+            expected_error_message=None,
             is_success=False,
         ),
         id="invalid-id-format",

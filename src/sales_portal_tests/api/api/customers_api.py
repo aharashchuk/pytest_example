@@ -41,7 +41,7 @@ class CustomersApi:
         )
         return self._client.send(options)
 
-    @step("DELETE /api/customers/{id}")
+    @step("DELETE /api/customers/{customer_id}")
     def delete(self, token: str, customer_id: str) -> Response[object | None]:
         """Delete a customer by *customer_id*.
 
@@ -90,7 +90,7 @@ class CustomersApi:
         )
         return self._client.send(options)
 
-    @step("GET /api/customers/{id}")
+    @step("GET /api/customers/{customer_id}")
     def get_by_id(self, token: str, customer_id: str) -> Response[object | None]:
         """Retrieve a single customer by *customer_id*.
 
@@ -105,7 +105,7 @@ class CustomersApi:
         )
         return self._client.send(options)
 
-    @step("PUT /api/customers/{id}")
+    @step("PUT /api/customers/{customer_id}")
     def update(
         self,
         token: str,

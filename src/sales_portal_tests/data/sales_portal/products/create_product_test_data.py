@@ -15,12 +15,12 @@ _faker = Faker()
 
 
 class CreateProductCase(CaseApi):
-    product_data: Product | dict[str, object]
+    product_data: Product
 
     def __init__(
         self,
         title: str,
-        product_data: Product | dict[str, object],
+        product_data: Product,
         expected_status: StatusCodes,
         expected_error_message: str | None,
         is_success: bool = True,
@@ -56,7 +56,7 @@ CREATE_PRODUCT_POSITIVE_CASES = [
     pytest.param(
         CreateProductCase(
             title="Create product with 1 space in name",
-            product_data=generate_product_data(name="Test Product"),
+            product_data=generate_product_data(name=f"Test {_faker.pystr(min_chars=5, max_chars=5)}"),
             expected_status=StatusCodes.CREATED,
             expected_error_message=None,
         ),

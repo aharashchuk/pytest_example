@@ -45,6 +45,7 @@ markers = [
     "regression: full regression suite",
     "api: API tests",
     "ui: UI tests",
+    "auth: authentication-related tests",
     "products: product-related tests",
     "customers: customer-related tests",
     "orders: order-related tests",

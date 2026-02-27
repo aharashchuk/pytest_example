@@ -37,11 +37,11 @@ class ProductsApi:
             url=api_config.PRODUCTS,
             method="POST",
             headers=_auth_headers(token),
-            data=product.model_dump(),
+            data=product.model_dump(exclude_none=True),
         )
         return self._client.send(options)
 
-    @step("PUT /api/products/{id}")
+    @step("PUT /api/products/{product_id}")
     def update(self, product_id: str, product: Product, token: str) -> Response[object | None]:
         """Replace an existing product by *product_id*.
 
@@ -54,11 +54,11 @@ class ProductsApi:
             url=api_config.product_by_id(product_id),
             method="PUT",
             headers=_auth_headers(token),
-            data=product.model_dump(),
+            data=product.model_dump(exclude_none=True),
         )
         return self._client.send(options)
 
-    @step("GET /api/products/{id}")
+    @step("GET /api/products/{product_id}")
     def get_by_id(self, product_id: str, token: str) -> Response[object | None]:
         """Retrieve a single product by *product_id*.
 
@@ -87,7 +87,7 @@ class ProductsApi:
         )
         return self._client.send(options)
 
-    @step("DELETE /api/products/{id}")
+    @step("DELETE /api/products/{product_id}")
     def delete(self, product_id: str, token: str) -> Response[object | None]:
         """Delete a product by *product_id*.
 

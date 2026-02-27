@@ -50,7 +50,7 @@ class OrdersApi:
         )
         return self._client.send(options)
 
-    @step("GET /api/orders/{id}")
+    @step("GET /api/orders/{order_id}")
     def get_by_id(self, order_id: str, token: str) -> Response[object | None]:
         """Retrieve a single order by *order_id*.
 
@@ -85,7 +85,7 @@ class OrdersApi:
         )
         return self._client.send(options)
 
-    @step("PUT /api/orders/{id}")
+    @step("PUT /api/orders/{order_id}")
     def update(self, token: str, order_id: str, payload: OrderUpdateBody) -> Response[object | None]:
         """Replace an existing order by *order_id*.
 
@@ -102,7 +102,7 @@ class OrdersApi:
         )
         return self._client.send(options)
 
-    @step("DELETE /api/orders/{id}")
+    @step("DELETE /api/orders/{order_id}")
     def delete(self, token: str, order_id: str) -> Response[object | None]:
         """Delete an order by *order_id*.
 
@@ -121,7 +121,7 @@ class OrdersApi:
     # Delivery
     # ------------------------------------------------------------------
 
-    @step("POST /api/orders/{id}/delivery")
+    @step("POST /api/orders/{order_id}/delivery")
     def add_delivery(
         self,
         token: str,
@@ -147,7 +147,7 @@ class OrdersApi:
     # Status
     # ------------------------------------------------------------------
 
-    @step("PUT /api/orders/{id}/status")
+    @step("PUT /api/orders/{order_id}/status")
     def update_status(
         self,
         order_id: str,
@@ -173,7 +173,7 @@ class OrdersApi:
     # Receive products
     # ------------------------------------------------------------------
 
-    @step("POST /api/orders/{id}/receive")
+    @step("POST /api/orders/{order_id}/receive")
     def receive_products(
         self,
         order_id: str,

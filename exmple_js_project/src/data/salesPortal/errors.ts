@@ -1,0 +1,16 @@
+export const RESPONSE_ERRORS = {
+  PRODUCT_NOT_FOUND: (id: string) => `Product with id '${id}' wasn't found`,
+  CUSTOMER_NOT_FOUND: (id: string) => `Customer with id '${id}' wasn't found`,
+  CONFLICT: (name: string) => `Product with name '${name}' already exists`,
+  BAD_REQUEST: "Incorrect request body",
+  UNAUTHORIZED: "Not authorized",
+  INCORRECT_DELIVERY: "Incorrect Delivery",
+  INVALID_DATE: "Invalid final date",
+  CUSTOMER_MISSING: "Missing customer",
+  MANAGER_NOT_FOUND: (id: string) => `Manager with id '${id}' wasn't found`,
+  ORDER_NOT_FOUND: (id: string) => `Order with id '${id}' wasn't found`,
+  INVALID_ORDRER_STATUS: "Invalid order status",
+  ORDER_IS_NOT_PROCESSED: `Can't process order. Please, schedule delivery`,
+  PRODUCT_NOT_REQUESTED: (id: string) => `Product with Id '${id}' is not requested`,
+  INVALID_PAYLOAD: "Argument passed in must be a string of 12 bytes or a string of 24 hex characters or an integer",
+};

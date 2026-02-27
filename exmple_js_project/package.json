@@ -1,0 +1,78 @@
+{
+  "name": "prod_project_aqa",
+  "version": "1.0.0",
+  "description": "Final_Project_Prod",
+  "homepage": "https://github.com/DorityTM/AQA_4_PROD_SALES_PORTAL#readme",
+  "bugs": {
+    "url": "https://github.com/DorityTM/AQA_4_PROD_SALES_PORTAL/issues"
+  },
+  "keywords": [
+    "AQA_4_course_Project"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DorityTM/AQA_4_PROD_SALES_PORTAL.git"
+  },
+  "license": "ISC",
+  "author": "Tatsiana Davidziuk",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "test:ui": "npx playwright test --project=sales-portal-ui",
+    "ui-mode": "npx playwright test --ui",
+    "ui-mode:dev": "cross-env TEST_ENV=dev npx playwright test --ui",
+    "test": "npx playwright test",
+    "test:dev": "cross-env TEST_ENV=dev npx playwright test",
+    "test:ui:regression": "npx playwright test --project=sales-portal-ui --grep \"@regression|@smoke\"",
+    "test:ui:smoke": "npm run test -- --project=sales-portal-ui --grep @smoke",
+    "test:api": "npm run test -- --project=sales-portal-api",
+    "test:api:regression": "npm run test -- --project=sales-portal-api --grep @regression",
+    "html-report-open": "npx playwright show-report",
+    "allure-report": "allure generate allure-results -o allure-report --clean",
+    "allure-report-open": "npm run allure-report && allure open allure-report",
+    "lint": "eslint .",
+    "lint:fix": "eslint ./src --fix",
+    "prettier": "prettier --config .prettierrc src/**/*.ts --check src/",
+    "prettier:fix": "prettier --config .prettierrc src/**/*.ts --write src/",
+    "format": " npm run prettier && npm run lint",
+    "format:fix": "npm run prettier:fix && npm run lint:fix",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.57.0",
+    "@types/bson": "^4.0.5",
+    "@types/dotenv": "^6.1.1",
+    "@types/lodash": "^4.17.21",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.48.0",
+    "@typescript-eslint/parser": "^8.48.0",
+    "allure-commandline": "^2.34.1",
+    "allure-playwright": "^3.4.3",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "jiti": "^2.6.1",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.1"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^10.1.0",
+    "@types/node-telegram-bot-api": "^0.64.13",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "bson": "^7.0.0",
+    "dotenv": "^17.2.3",
+    "faker": "^5.5.3",
+    "lodash": "^4.17.21",
+    "moment": "^2.30.1",
+    "node-telegram-bot-api": "^0.67.0"
+  }
+}

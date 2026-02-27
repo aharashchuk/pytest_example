@@ -1,0 +1,77 @@
+name: Run Sales Portal tests
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: # Manually trigger the workflow
+
+permissions:
+  contents: write
+  pages: write
+  pull-requests: write
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.57.0-noble
+    env:
+        SALES_PORTAL_API_URL: ${{ secrets.SALES_PORTAL_API_URL }}
+        SALES_PORTAL_URL: ${{ secrets.SALES_PORTAL_URL }}
+        USER_NAME: ${{ secrets.USER_NAME }}
+        USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
+        MANAGER_IDS: ${{ secrets.MANAGER_IDS }}
+    steps:
+      # Checkout
+      - uses: actions/checkout@v4
+      # Install OpenJDK
+      - name: Install OpenJDK
+        run: |
+          apt-get update
+          apt-get install -y openjdk-17-jre
+          echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))" >> $GITHUB_ENV
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Run API tests
+      - name: Run API tests
+        run: npm run test:api:regression
+        continue-on-error: true
+
+        # Run UI tests
+      - name: Run UI tests
+        run: npm run test:ui:regression
+        continue-on-error: true
+          
+        # Create Allure report
+      - name: Create Allure report
+        run: npm run allure-report
+
+      - name: Save Allure report
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-report
+          path: ./allure-report
+
+      # Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        if: success()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./allure-report
+          destination_dir: allure-report
+
+      - name: Telegram notification
+        if: success()
+        run: |
+          MESSAGE="Test run finished!\n\nLink to deployed report:\n\nhttps://DorityTM.github.io/AQA_4_PROD_SALES_PORTAL/allure-report/#"
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d "{\"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\", \"text\": \"${MESSAGE}\", \"disable_notification\": false}" \
+            https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from sales_portal_tests.data.sales_portal.products.manufacturers import Manufacturers
 
@@ -54,11 +54,11 @@ class ProductsResponse(BaseModel):
 
 
 class OrderProductFromResponse(BaseModel):
-    id: str
-    name: str
-    manufacturer: Manufacturers
-    price: int
-    amount: int
+    id: str = Field(alias="_id", default="")
+    name: str = ""
+    manufacturer: Manufacturers = Manufacturers.APPLE
+    price: int = 0
+    amount: int = 0
     notes: str | None = None
     received: bool = False
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from sales_portal_tests.data.sales_portal.country import Country
 
@@ -22,7 +22,7 @@ class Customer(BaseModel):
 
 
 class CustomerFromResponse(BaseModel):
-    id: str = ""
+    id: str = Field(alias="_id", default="")
     email: str = ""
     name: str = ""
     country: Country = Country.USA
@@ -32,7 +32,7 @@ class CustomerFromResponse(BaseModel):
     flat: int = 0
     phone: str = ""
     notes: str = ""
-    created_on: str = ""
+    created_on: str = Field(alias="createdOn", default="")
 
     model_config = {"populate_by_name": True}
 

@@ -26,18 +26,20 @@ class CustomersApi:
         self._client = client
 
     @step("POST /api/customers")
-    def create(self, token: str, customer: Customer) -> Response[object | None]:
+    def create(self, token: str, customer: Customer | dict[str, object]) -> Response[object | None]:
         """Create a new customer.
 
         Args:
             token: Bearer auth token.
-            customer: Customer payload.
+            customer: Customer payload — either a :class:`Customer` model instance
+                or a plain :class:`dict` (used for negative tests with missing/invalid fields).
         """
+        data = customer.model_dump() if isinstance(customer, Customer) else customer
         options = RequestOptions(
             url=api_config.CUSTOMERS,
             method="POST",
             headers=_auth_headers(token),
-            data=customer.model_dump(),
+            data=data,
         )
         return self._client.send(options)
 

@@ -5,6 +5,7 @@ from collections.abc import Generator
 import pytest
 
 from sales_portal_tests.api.api.customers_api import CustomersApi
+from sales_portal_tests.api.api.notifications_api import NotificationsApi
 from sales_portal_tests.api.api.orders_api import OrdersApi
 from sales_portal_tests.api.api.products_api import ProductsApi
 from sales_portal_tests.api.api_clients.playwright_api_client import PlaywrightApiClient
@@ -57,6 +58,12 @@ def orders_service(
 ) -> OrdersApiService:
     """High-level :class:`OrdersApiService` backed by the shared order/product/customer wrappers."""
     return OrdersApiService(orders_api, products_service, customers_service)
+
+
+@pytest.fixture(scope="session")
+def notifications_api(api_client: PlaywrightApiClient) -> NotificationsApi:
+    """Low-level :class:`NotificationsApi` wrapper backed by the shared client."""
+    return NotificationsApi(api_client)
 
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Roles(StrEnum):
@@ -14,12 +14,12 @@ class Roles(StrEnum):
 
 
 class User(BaseModel):
-    id: str
-    username: str
-    first_name: str
-    last_name: str
-    roles: list[Roles]
-    created_on: str
+    id: str = Field(alias="_id", default="")
+    username: str = ""
+    first_name: str = Field(alias="firstName", default="")
+    last_name: str = Field(alias="lastName", default="")
+    roles: list[Roles] = Field(default_factory=list)
+    created_on: str = Field(alias="createdOn", default="")
     is_success: bool = True
     error_message: str | None = None
 

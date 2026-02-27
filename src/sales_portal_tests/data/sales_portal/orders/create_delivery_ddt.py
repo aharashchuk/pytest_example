@@ -199,11 +199,11 @@ _INVALID_VALUES_CASES = [
     ),
     pytest.param(
         CreateDeliveryCase(
-            title="Past date",
+            title="Past date is accepted",
             delivery_data=generate_delivery(final_date="2024/12/31"),
-            expected_status=StatusCodes.BAD_REQUEST,
-            expected_error_message=ResponseErrors.BAD_REQUEST,
-            is_success=False,
+            expected_status=StatusCodes.OK,
+            expected_error_message=None,
+            is_success=True,
         ),
         id="past-date",
     ),

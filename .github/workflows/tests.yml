@@ -1,0 +1,82 @@
+name: Run Sales Portal Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: # Manually trigger the workflow
+
+permissions:
+  contents: write
+  pages: write
+  pull-requests: write
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.49.0-noble
+
+    env:
+      USER_NAME: ${{ secrets.USER_NAME }}
+      USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
+      SALES_PORTAL_URL: ${{ secrets.SALES_PORTAL_URL }}
+      SALES_PORTAL_API_URL: ${{ secrets.SALES_PORTAL_API_URL }}
+      MANAGER_IDS: ${{ secrets.MANAGER_IDS }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install OpenJDK 17
+        run: |
+          apt-get update
+          apt-get install -y openjdk-17-jre
+          echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      - name: Run API regression tests
+        run: pytest tests/api/ -m "regression or smoke" --alluredir=allure-results
+        continue-on-error: true
+
+      - name: Run UI regression tests
+        run: pytest tests/ui/ -m "regression or smoke" --alluredir=allure-results
+        continue-on-error: true
+
+      - name: Generate Allure report
+        run: allure generate allure-results -o allure-report --clean
+
+      - name: Save Allure report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: ./allure-report
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./allure-report
+          destination_dir: allure-report
+
+      - name: Telegram notification
+        if: always()
+        env:
+          PASSED: ${{ steps.run-api.outputs.passed }}
+          FAILED: ${{ steps.run-ui.outputs.failed }}
+        run: |
+          python scripts/notify_telegram.py \
+            --report-url "https://aharashchuk.github.io/pytest_example/allure-report/#" \
+            --env "default"

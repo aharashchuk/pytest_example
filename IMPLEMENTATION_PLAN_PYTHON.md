@@ -2,6 +2,7 @@
 
 > **Reference:** [`STACK_PYTHON.md`](./STACK_PYTHON.md) (full architecture & library spec)  
 > **Original TS project:** [`STACK.md`](./STACK.md)  
+> **Dev environment:** [`sales-portal/`](./sales-portal/) (backend + frontend + Docker Compose)  
 > **Approach:** Bottom-up, layer by layer — infrastructure first, then data, API, UI, tests last
 >
 > ### Key Pythonic Principles Applied
@@ -38,6 +39,198 @@ Rules to avoid “double validation confusion”:
 1. A test should normally choose **either** schema-validation **or** strict Pydantic parsing as its primary shape assertion.
 2. If you do both for a critical endpoint, do it deliberately and document it in the test name/Allure description.
 3. Prefer schema validation for endpoints where you only need “required fields exist”, and Pydantic for endpoints where you want typed consumption.
+
+---
+
+## Dev Environment Reference (`sales-portal/`)
+
+The `sales-portal/` folder contains the full development environment of the application under test. Use it as the **single source of truth** for API contracts, data shapes, validation rules, and enums.
+
+### How to run locally
+
+```bash
+cd sales-portal
+docker-compose up --build
+```
+
+| Service           | URL                              | Notes                     |
+| ----------------- | -------------------------------- | ------------------------- |
+| **Frontend**      | `http://localhost:8585`          | Vanilla JS SPA            |
+| **Backend API**   | `http://localhost:8686`          | Express + MongoDB         |
+| **Swagger**       | `http://localhost:8686/api/docs` | Full API documentation    |
+| **Mongo Express** | `http://localhost:8081`          | DB admin UI (admin/admin) |
+
+Default admin credentials: `admin@example.com` / `admin123`
+
+### Backend structure at a glance
+
+```
+sales-portal/backend/
+├── index.ts                  # Express app setup, all routers mounted at /api
+├── controllers/              # Request handlers per domain
+├── data/
+│   ├── enums.ts              # COUNTRIES, MANUFACTURERS, DELIVERY, ORDER_STATUSES, ROLES,
+│   │                         #   VALIDATION_ERROR_MESSAGES, ORDER_HISTORY_ACTIONS, NOTIFICATIONS
+│   ├── constants.ts          # MAXIMUM_REQUESTED_PRODUCTS=5, MINIMUN_REQUESTED_PRODUCTS=1,
+│   │                         #   DATE_AND_TIME_FORMAT, DATE_FORMAT
+│   ├── types/                # TypeScript interfaces per entity
+│   └── jsonSchemas/          # Server-side JSON Schema validation per entity
+├── middleware/                # Auth, validation, uniqueness, role checks
+├── models/                   # Mongoose schemas (Product, Customer, Order, User, Notification, Role, Token)
+├── routers/                  # Express routers — one per domain
+├── services/                 # Business logic layer
+├── utils/
+│   └── validations.ts        # Regex patterns + isValidInput() + isValidDate()
+└── ws/                       # WebSocket (Socket.IO) for real-time notifications
+```
+
+### Complete API route map (derived from routers)
+
+| Method   | Route                                            | Auth | Body schema                 | Notes                                                                            |
+| -------- | ------------------------------------------------ | ---- | --------------------------- | -------------------------------------------------------------------------------- |
+| `POST`   | `/api/login`                                     | No   | `{username, password}`      | Returns token in `Authorization` header                                          |
+| `POST`   | `/api/logout`                                    | Yes  | —                           | Invalidates current token                                                        |
+| `GET`    | `/api/products`                                  | Yes  | —                           | Sorted/filtered list (query: `manufacturer`, `search`, `sortField`, `sortOrder`) |
+| `GET`    | `/api/products/all`                              | Yes  | —                           | All products (no pagination)                                                     |
+| `GET`    | `/api/products/:id`                              | Yes  | —                           | Single product by ID                                                             |
+| `POST`   | `/api/products`                                  | Yes  | `productSchema`             | Create product (unique name enforced)                                            |
+| `PUT`    | `/api/products/:id`                              | Yes  | `productSchema`             | Update product                                                                   |
+| `DELETE` | `/api/products/:id`                              | Yes  | —                           | Delete (fails if assigned to order)                                              |
+| `GET`    | `/api/customers`                                 | Yes  | —                           | Sorted/filtered customer list                                                    |
+| `GET`    | `/api/customers/all`                             | Yes  | —                           | All customers (no pagination)                                                    |
+| `GET`    | `/api/customers/:id`                             | Yes  | —                           | Single customer by ID                                                            |
+| `POST`   | `/api/customers`                                 | Yes  | `customerSchema`            | Create customer (unique email enforced)                                          |
+| `PUT`    | `/api/customers/:id`                             | Yes  | `customerSchema`            | Update customer                                                                  |
+| `DELETE` | `/api/customers/:id`                             | Yes  | —                           | Delete (fails if assigned to order)                                              |
+| `GET`    | `/api/customers/:customerId/orders`              | Yes  | —                           | Orders for a specific customer                                                   |
+| `GET`    | `/api/orders`                                    | Yes  | —                           | All orders                                                                       |
+| `GET`    | `/api/orders/:id`                                | Yes  | —                           | Single order by ID                                                               |
+| `POST`   | `/api/orders`                                    | Yes  | `orderCreateSchema`         | Create order (`{customer, products}`)                                            |
+| `PUT`    | `/api/orders/:id`                                | Yes  | `orderUpdateSchema`         | Update order                                                                     |
+| `DELETE` | `/api/orders/:id`                                | Yes  | —                           | Delete order                                                                     |
+| `POST`   | `/api/orders/:id/delivery`                       | Yes  | `orderDeliverySchema`       | Add/update delivery                                                              |
+| `PUT`    | `/api/orders/:id/status`                         | Yes  | `orderStatusSchema`         | Update order status                                                              |
+| `POST`   | `/api/orders/:id/receive`                        | Yes  | `orderReceiveSchema`        | Mark products as received                                                        |
+| `POST`   | `/api/orders/:id/comments`                       | Yes  | `orderCommentsCreateSchema` | Add comment                                                                      |
+| `DELETE` | `/api/orders/:id/comments/:commentId`            | Yes  | —                           | Delete comment                                                                   |
+| `PUT`    | `/api/orders/:orderId/assign-manager/:managerId` | Yes  | —                           | Assign manager (must have Manager role)                                          |
+| `PUT`    | `/api/orders/:orderId/unassign-manager`          | Yes  | —                           | Unassign manager                                                                 |
+| `GET`    | `/api/notifications`                             | Yes  | —                           | User notifications                                                               |
+| `PATCH`  | `/api/notifications/:notificationId/read`        | Yes  | —                           | Mark single as read                                                              |
+| `PATCH`  | `/api/notifications/mark-all-read`               | Yes  | —                           | Mark all as read                                                                 |
+| `GET`    | `/api/metrics`                                   | Yes  | —                           | Business metrics (orders, customers, products)                                   |
+| `GET`    | `/api/users`                                     | Yes  | —                           | List all users                                                                   |
+| `GET`    | `/api/users/:id`                                 | Yes  | —                           | Single user                                                                      |
+| `POST`   | `/api/users`                                     | Yes  | `userSchema`                | Register new user                                                                |
+| `DELETE` | `/api/users/:id`                                 | Yes  | —                           | Delete user                                                                      |
+| `PATCH`  | `/api/users/password/:id`                        | Yes  | —                           | Change password                                                                  |
+| `GET`    | `/api/promocodes/:id`                            | No   | —                           | Get promocode by name (rebates)                                                  |
+
+### Server-side JSON Schemas (from `backend/data/jsonSchemas/`)
+
+These define what the backend validates on incoming requests. Mirror them in Python test schemas:
+
+| Schema                      | Required fields                                                                            | Constraints                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `productSchema`             | `name`, `amount`, `price`, `manufacturer`                                                  | `amount`: integer; `price`: integer; `manufacturer`: enum                    |
+| `customerSchema`            | `email`, `name`, `country`, `city`, `street`, `house`, `flat`, `phone`                     | `country`: enum; `house`/`flat`: integer                                     |
+| `orderCreateSchema`         | `customer`, `products`                                                                     | `products`: array of strings, min 1 / max 5 items                            |
+| `orderUpdateSchema`         | `customer`, `products`                                                                     | Same as create                                                               |
+| `orderDeliverySchema`       | `finalDate`, `condition`, `address` (nested: `country`, `city`, `street`, `house`, `flat`) | `condition`: enum `[Delivery, Pickup]`                                       |
+| `orderStatusSchema`         | `status`                                                                                   | `status`: enum `[Draft, In Process, Partially Received, Received, Canceled]` |
+| `orderReceiveSchema`        | `products`                                                                                 | Array of product ID strings, min 1 / max 5                                   |
+| `orderCommentsCreateSchema` | `comment`                                                                                  | String                                                                       |
+| `userSchema`                | `username`, `password`, `firstName`, `lastName`                                            | `password` min 8 chars                                                       |
+
+### Backend validation rules (from `utils/validations.ts` + middleware)
+
+These regex patterns and range checks are enforced server-side. Use them when building negative DDT cases:
+
+| Field         | Regex / Rule                                                    | Range                  |
+| ------------- | --------------------------------------------------------------- | ---------------------- |
+| Customer Name | `^(?!.*?\s{2})[A-Za-z ]{1,40}$` + no leading/trailing spaces    | 1–40 chars             |
+| City          | `^(?!.*?\s{2})[A-Za-z ]{1,20}$` + no leading/trailing spaces    | 1–20 chars             |
+| Street        | `^(?!.*?\s{2})[A-Za-z0-9 ]{1,40}$` + no leading/trailing spaces | 1–40 chars             |
+| Phone         | `^\+[0-9]{10,20}$` + no leading/trailing spaces                 | 10–20 digits after `+` |
+| Email         | Standard email regex + no leading/trailing spaces               |                        |
+| Product Name  | `^(?!.*?\s{2})[A-Za-z0-9 ]{3,40}$` + no leading/trailing spaces | 3–40 chars             |
+| Amount        | `^[0-9]{1,3}$` (integer)                                        | 0–999                  |
+| Price         | `^[0-9]{1,5}$` (integer)                                        | 1–99999                |
+| House         | `^[0-9]{1,3}$`                                                  | 1–999                  |
+| Flat          | `^[0-9]{1,4}$`                                                  | 1–9999                 |
+| Notes         | `^[^<>]{0,250}$` + no leading/trailing spaces                   | 0–250 chars, no `<>`   |
+
+Additional business rules:
+
+- **Product name must be unique** — 409 if duplicate: `Product with name '...' already exists`
+- **Customer email must be unique** — 409 if duplicate: `Customer with email '...' already exists`
+- **Cannot delete product assigned to an order** — 400: `Not allowed to delete product, assigned to the order`
+- **Cannot delete customer assigned to an order** — 400: `Not allowed to delete customer, assigned to the order`
+- **Order products**: min 1, max 5 items per order
+- **Login error messages**: `Incorrect credentials` (400) for wrong username or password
+
+### Enums (from `backend/data/enums.ts`)
+
+Use these exact values when creating Python `StrEnum`/`IntEnum` classes:
+
+| Enum                        | Values                                                                                                                                                                                                                                                    |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COUNTRIES`                 | `USA`, `Canada`, `Belarus`, `Ukraine`, `Germany`, `France`, `Great Britain`, `Russia`                                                                                                                                                                     |
+| `MANUFACTURERS`             | `Apple`, `Samsung`, `Google`, `Microsoft`, `Sony`, `Xiaomi`, `Amazon`, `Tesla`                                                                                                                                                                            |
+| `DELIVERY`                  | `Delivery`, `Pickup`                                                                                                                                                                                                                                      |
+| `ORDER_STATUSES`            | `Draft`, `In Process`, `Partially Received`, `Received`, `Canceled`                                                                                                                                                                                       |
+| `ROLES`                     | `USER`, `ADMIN`                                                                                                                                                                                                                                           |
+| `ORDER_HISTORY_ACTIONS`     | `Order created`, `Customer changed`, `Requested products changed`, `Order processing started`, `Delivery Scheduled`, `Delivery Edited`, `Received`, `All products received`, `Order canceled`, `Manager Assigned`, `Manager Unassigned`, `Order reopened` |
+| `VALIDATION_ERROR_MESSAGES` | See `enums.ts` — per-field error messages + `Incorrect request body`                                                                                                                                                                                      |
+
+### Notification types (from `backend/data/types/notification.types.ts`)
+
+```
+assigned, statusChanged, customerChanged, productsChanged, deliveryUpdated,
+productsDelivered, managerChanged, commentAdded, commentDeleted, newOrder, unassigned
+```
+
+### Notification message templates (from `backend/data/enums.ts`)
+
+```
+statusChanged:      Status has been updated to "{status}" in order.
+customerChanged:    Customer has been changed in order.
+productsChanged:    Products have been updated in order.
+deliveryUpdated:    Delivery details have been added or updated in order.
+productsDelivered:  Products have been marked as delivered in order.
+managerChanged:     You have been reassigned to order.
+commentAdded:       A new comment has been added to order.
+newOrder:           A new order has been created
+commentDeleted:     A comment has been deleted from order
+assigned:           You have been assigned to order
+unassigned:         You have been unassigned from order
+```
+
+### Data model shapes (from `backend/models/` + `data/types/`)
+
+**Product:** `{ _id, name, amount, price, manufacturer, createdOn, notes? }`
+
+**Customer:** `{ _id, email, name, country, city, street, house, flat, phone, createdOn, notes? }`
+
+**Order:** `{ _id, status, customer (populated), products[] (with received flag), delivery?, total_price, createdOn, comments[], history[], assignedManager? }`
+
+**ProductInOrder:** `{ _id, name, amount, price, manufacturer, notes?, received }`
+
+**Delivery:** `{ finalDate, condition, address: { country, city, street, house, flat } }`
+
+**Comment:** `{ _id, text, createdOn }`
+
+**History entry:** `{ action, status, customer, products[], total_price, delivery?, changedOn, performer, assignedManager? }`
+
+**User:** `{ _id, username, firstName, lastName, roles[], createdOn }`
+
+**Notification:** `{ _id, userId, type, orderId, message, read, createdAt, expiresAt? }`
+
+### API response envelope
+
+All responses follow the pattern: `{ IsSuccess: boolean, ErrorMessage: string | null, ...data }`
+
+Login response also returns: `Authorization` header (Bearer JWT token), `X-User-Name` header, `User` object in body.
 
 ---
 
@@ -275,10 +468,14 @@ python -c "import sales_portal_tests"  # package is importable
 
 ```
 # .env
-SALES_PORTAL_URL=https://...
-SALES_PORTAL_API_URL=https://...
+# For local dev environment (docker-compose in sales-portal/):
+#   SALES_PORTAL_URL=http://localhost:8585
+#   SALES_PORTAL_API_URL=http://localhost:8686
+# For remote environment, use the deployed URLs.
+SALES_PORTAL_URL=http://localhost:8585
+SALES_PORTAL_API_URL=http://localhost:8686
 USER_NAME=admin@example.com
-USER_PASSWORD=secret
+USER_PASSWORD=admin123
 MANAGER_IDS=["id1","id2"]
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
@@ -296,14 +493,19 @@ Use **module-level constants and plain functions** — not a class with static m
 
 ```python
 # api_config.py
+# Derived from actual backend routers in sales-portal/backend/routers/
 BASE_URL = SALES_PORTAL_API_URL
 
 # Static endpoints (module constants)
 LOGIN = f"{BASE_URL}/api/login"
+LOGOUT = f"{BASE_URL}/api/logout"
 PRODUCTS = f"{BASE_URL}/api/products"
+PRODUCTS_ALL = f"{BASE_URL}/api/products/all"
 CUSTOMERS = f"{BASE_URL}/api/customers"
+CUSTOMERS_ALL = f"{BASE_URL}/api/customers/all"
 ORDERS = f"{BASE_URL}/api/orders"
 NOTIFICATIONS = f"{BASE_URL}/api/notifications"
+NOTIFICATIONS_MARK_ALL_READ = f"{BASE_URL}/api/notifications/mark-all-read"
 METRICS = f"{BASE_URL}/api/metrics"
 USERS = f"{BASE_URL}/api/users"
 
@@ -314,13 +516,47 @@ def product_by_id(product_id: str) -> str:
 def customer_by_id(customer_id: str) -> str:
     return f"{CUSTOMERS}/{customer_id}"
 
+def customer_orders(customer_id: str) -> str:
+    return f"{CUSTOMERS}/{customer_id}/orders"
+
 def order_by_id(order_id: str) -> str:
     return f"{ORDERS}/{order_id}"
 
-# ... delivery, status, comments, etc.
+def order_delivery(order_id: str) -> str:
+    return f"{ORDERS}/{order_id}/delivery"
+
+def order_status(order_id: str) -> str:
+    return f"{ORDERS}/{order_id}/status"
+
+def order_receive(order_id: str) -> str:
+    return f"{ORDERS}/{order_id}/receive"
+
+def order_comments(order_id: str) -> str:
+    return f"{ORDERS}/{order_id}/comments"
+
+def order_comment_by_id(order_id: str, comment_id: str) -> str:
+    return f"{ORDERS}/{order_id}/comments/{comment_id}"
+
+def assign_manager(order_id: str, manager_id: str) -> str:
+    return f"{ORDERS}/{order_id}/assign-manager/{manager_id}"
+
+def unassign_manager(order_id: str) -> str:
+    return f"{ORDERS}/{order_id}/unassign-manager"
+
+def notification_read(notification_id: str) -> str:
+    return f"{NOTIFICATIONS}/{notification_id}/read"
+
+def user_by_id(user_id: str) -> str:
+    return f"{USERS}/{user_id}"
+
+def user_password(user_id: str) -> str:
+    return f"{USERS}/password/{user_id}"
+
+def promocode_by_name(name: str) -> str:
+    return f"{BASE_URL}/api/promocodes/{name}"
 ```
 
-Cover all endpoints: login, products, customers, orders (CRUD + delivery + status + receive + comments + assign-manager), notifications, metrics, users.
+Cover all endpoints from the backend router map (see [Dev Environment Reference](#dev-environment-reference-sales-portal) above).
 
 ### Step 2.4 — Verification checkpoint
 
@@ -340,46 +576,57 @@ mypy src/
 
 Create the following in `src/sales_portal_tests/data/`:
 
-| File              | Contents                                                                                                                                    | TS Equivalent    |
+> **Source of truth:** `sales-portal/backend/data/enums.ts` and `sales-portal/backend/data/constants.ts`
+
+| File              | Contents                                                                                                                                    | Backend Source   |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `status_codes.py` | `StatusCodes(IntEnum)` — OK=200, CREATED=201, DELETED=204, BAD_REQUEST=400, UNAUTHORIZED=401, NOT_FOUND=404, CONFLICT=409, SERVER_ERROR=500 | `statusCodes.ts` |
-| `tags.py`         | Constants or `StrEnum` for marker names (SMOKE, REGRESSION, etc.)                                                                           | `tags.ts`        |
+| `status_codes.py` | `StatusCodes(IntEnum)` — OK=200, CREATED=201, DELETED=204, BAD_REQUEST=400, UNAUTHORIZED=401, NOT_FOUND=404, CONFLICT=409, SERVER_ERROR=500 | HTTP conventions |
+| `tags.py`         | Constants or `StrEnum` for marker names (SMOKE, REGRESSION, etc.)                                                                           | —                |
 
 Create in `src/sales_portal_tests/data/sales_portal/`:
 
-| File                        | Contents                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `constants.py`              | Timeout values (`TIMEOUT_10_S = 10_000`, `TIMEOUT_30_S = 30_000`)                                                  |
-| `country.py`                | `Country(StrEnum)` with all supported countries                                                                    |
-| `errors.py`                 | `ResponseErrors` class with error message constants                                                                |
-| `order_status.py`           | `OrderStatus(StrEnum)` — Draft, InProcess, Processing, etc.                                                        |
-| `delivery_status.py`        | `DeliveryCondition(StrEnum)`, `DeliveryLocation(StrEnum)`, `IDeliveryAddress` dataclass, `IDeliveryInfo` dataclass |
-| `notifications.py`          | Modal copy data (titles, messages, button text)                                                                    |
-| `products/manufacturers.py` | `Manufacturers(StrEnum)`                                                                                           |
+| File                 | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Backend Source                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `constants.py`       | `MAXIMUM_REQUESTED_PRODUCTS = 5`, `MINIMUM_REQUESTED_PRODUCTS = 1`, `DATE_AND_TIME_FORMAT = "YYYY/MM/DD HH:mm:ss"`, `DATE_FORMAT = "YYYY/MM/DD"`, timeout values                                                                                                                                                                                                                                                                                                                                                     | `backend/data/constants.ts`               |
+| `country.py`         | `Country(StrEnum)`: `USA`, `Canada`, `Belarus`, `Ukraine`, `Germany`, `France`, `Great_Britain = "Great Britain"`, `Russia`                                                                                                                                                                                                                                                                                                                                                                                          | `COUNTRIES` enum in `enums.ts`            |
+| `manufacturers.py`   | `Manufacturers(StrEnum)`: `Apple`, `Samsung`, `Google`, `Microsoft`, `Sony`, `Xiaomi`, `Amazon`, `Tesla`                                                                                                                                                                                                                                                                                                                                                                                                             | `MANUFACTURERS` enum in `enums.ts`        |
+| `roles.py`           | `Roles(StrEnum)`: `USER`, `ADMIN`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `ROLES` enum in `enums.ts`                |
+| `errors.py`          | Error message constants matching `VALIDATION_ERROR_MESSAGES` enum from backend: `CUSTOMER_NAME`, `CITY`, `ADDRESS`, `STREET`, `HOUSE`, `FLAT`, `EMAIL`, `PHONE`, `NOTES`, `PRODUCTS_NAME`, `AMOUNT`, `PRICE`, `COUNTRY`, `MANUFACTURER`, `CUSTOMER`, `PRODUCT`, `DELIVERY`, `BODY = "Incorrect request body"`, `COMMENT_NOT_FOUND`, `GET_USERS`                                                                                                                                                                      | `VALIDATION_ERROR_MESSAGES` in `enums.ts` |
+| `order_status.py`    | `OrderStatus(StrEnum)`: `DRAFT = "Draft"`, `IN_PROCESS = "In Process"`, `PARTIALLY_RECEIVED = "Partially Received"`, `RECEIVED = "Received"`, `CANCELED = "Canceled"`                                                                                                                                                                                                                                                                                                                                                | `ORDER_STATUSES` in `enums.ts`            |
+| `delivery_status.py` | `DeliveryCondition(StrEnum)`: `DELIVERY = "Delivery"`, `PICK_UP = "Pickup"`. Plus `DeliveryAddress` and `DeliveryInfo` dataclasses                                                                                                                                                                                                                                                                                                                                                                                   | `DELIVERY` enum in `enums.ts`             |
+| `order_history.py`   | `OrderHistoryAction(StrEnum)`: `CREATED = "Order created"`, `CUSTOMER_CHANGED = "Customer changed"`, `REQUIRED_PRODUCTS_CHANGED = "Requested products changed"`, `PROCESSED = "Order processing started"`, `DELIVERY_SCHEDULED = "Delivery Scheduled"`, `DELIVERY_EDITED = "Delivery Edited"`, `RECEIVED = "Received"`, `RECEIVED_ALL = "All products received"`, `CANCELED = "Order canceled"`, `MANAGER_ASSIGNED = "Manager Assigned"`, `MANAGER_UNASSIGNED = "Manager Unassigned"`, `REOPENED = "Order reopened"` | `ORDER_HISTORY_ACTIONS` in `enums.ts`     |
+| `notifications.py`   | Notification type constants and message templates matching `NOTIFICATIONS` object in backend: `status_changed(status)`, `customer_changed`, `products_changed`, `delivery_updated`, `products_delivered`, `manager_changed`, `comment_added`, `new_order`, `comment_deleted`, `assigned`, `unassigned`                                                                                                                                                                                                               | `NOTIFICATIONS` in `enums.ts`             |
 
 ### Step 3.2 — Pydantic / Dataclass Models (`src/sales_portal_tests/data/models/`)
 
-Create one module per domain entity. Use **pydantic `BaseModel`** for API request/response bodies (runtime validation + serialisation) and **`@dataclass`** for lightweight internal data (DDT cases, config):
+Create one module per domain entity. Use **pydantic `BaseModel`** for API request/response bodies (runtime validation + serialisation) and **`@dataclass`** for lightweight internal data (DDT cases, config).
 
-| File               | Models                                                                                                                                                               |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `core.py`          | `RequestOptions` (dataclass), `Response[T]` (generic dataclass), `ResponseFields` (dataclass), `CaseApi` (dataclass: title, expected_status, expected_error_message) |
-| `credentials.py`   | `Credentials` (dataclass: username, password)                                                                                                                        |
-| `product.py`       | `Product`, `ProductFromResponse`, `ProductResponse`, `ProductsResponse`, `OrderProductFromResponse`                                                                  |
-| `customer.py`      | `Customer`, `CustomerFromResponse`, `CustomerResponse`, `CustomersResponse`, `CustomerListResponse`                                                                  |
-| `order.py`         | `OrderCreateBody`, `OrderUpdateBody`, `OrderFromResponse`, `OrderResponse`, `OrdersResponse`                                                                         |
-| `delivery.py`      | `DeliveryCase`, delivery UI case models                                                                                                                              |
-| `metrics.py`       | `ResponseMetrics`                                                                                                                                                    |
-| `notifications.py` | `NotificationsResponse`                                                                                                                                              |
-| `user.py`          | `User` model                                                                                                                                                         |
+> **Source of truth:** `sales-portal/backend/data/types/` and `sales-portal/backend/models/`
+
+| File               | Models                                                                                                                                                                                                                                                                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core.py`          | `RequestOptions` (dataclass), `Response[T]` (generic dataclass), `ResponseFields` (dataclass), `CaseApi` (dataclass: title, expected_status, expected_error_message)                                                                                                                                                                |
+| `credentials.py`   | `Credentials` (dataclass: username, password)                                                                                                                                                                                                                                                                                       |
+| `product.py`       | `Product` (request body: `name`, `amount`, `price`, `manufacturer`, `notes?`), `ProductFromResponse` (+ `_id`, `createdOn`), `ProductResponse` (envelope), `ProductsResponse`                                                                                                                                                       |
+| `customer.py`      | `Customer` (request: `email`, `name`, `country`, `city`, `street`, `house`, `flat`, `phone`, `notes?`), `CustomerFromResponse` (+ `_id`, `createdOn`), `CustomerResponse`, `CustomersResponse`, `CustomerListResponse`                                                                                                              |
+| `order.py`         | `OrderCreateBody` (`customer: str`, `products: list[str]`), `OrderUpdateBody` (same), `ProductInOrder` (+ `received: bool`), `OrderFromResponse` (`_id`, `status`, `customer` (populated), `products[]`, `delivery?`, `total_price`, `createdOn`, `comments[]`, `history[]`, `assignedManager?`), `OrderResponse`, `OrdersResponse` |
+| `delivery.py`      | `DeliveryAddress` (`country`, `city`, `street`, `house`, `flat`), `Delivery` (`finalDate`, `condition`, `address`), `DeliveryCase` (DDT: title, delivery_data, expected_status, expected_error?)                                                                                                                                    |
+| `comment.py`       | `Comment` (`_id?`, `text`, `createdOn`), `CommentCreateBody` (`comment: str`)                                                                                                                                                                                                                                                       |
+| `history.py`       | `HistoryEntry` (`action`, `status`, `customer`, `products[]`, `total_price`, `delivery?`, `changedOn`, `performer`, `assignedManager?`)                                                                                                                                                                                             |
+| `user.py`          | `User` (`_id`, `username`, `firstName`, `lastName`, `roles[]`, `createdOn`), `UserCreateBody` (`username`, `password`, `firstName`, `lastName`)                                                                                                                                                                                     |
+| `metrics.py`       | `OrderMetrics` (`totalRevenue`, `totalOrders`, `averageOrderValue`, `totalCanceledOrders`, `recentOrders`, `ordersCountPerDay`), `CustomerMetrics`, `ProductMetrics`, `ResponseMetrics`                                                                                                                                             |
+| `notifications.py` | `Notification` (`_id`, `userId`, `type`, `orderId`, `message`, `read`, `createdAt`, `expiresAt?`), `NotificationsResponse`                                                                                                                                                                                                          |
 
 ### Step 3.3 — JSON Schemas (`src/sales_portal_tests/data/schemas/`)
 
-Create schema dicts (Python dicts matching JSON Schema spec):
+Create schema dicts (Python dicts matching JSON Schema spec).
+
+> **Source of truth:** `sales-portal/backend/data/jsonSchemas/` for server-side validation schemas.
+> These are the **request** schemas used by the backend. For **response** validation in tests, create schemas that describe the response body shape (including `IsSuccess`, `ErrorMessage`, and entity data).
 
 | Directory        | Schemas                                                                                                      |
 | ---------------- | ------------------------------------------------------------------------------------------------------------ |
-| `core_schema.py` | `OBLIGATORY_FIELDS_SCHEMA`, `OBLIGATORY_REQUIRED_FIELDS`                                                     |
+| `core_schema.py` | `OBLIGATORY_FIELDS_SCHEMA` (common `IsSuccess`, `ErrorMessage` fields), `OBLIGATORY_REQUIRED_FIELDS`         |
 | `products/`      | `create_schema`, `get_schema`, `get_all_products_schema`, `product_schema`                                   |
 | `customers/`     | `create_schema`, `get_by_id_schema`, `get_list_schema`, `get_all_schema`, `update_schema`, `customer_schema` |
 | `orders/`        | `create_schema`, `get_schema`, `get_all_orders_schema`, `order_schema`                                       |
@@ -580,38 +827,52 @@ mypy src/api/api_clients/
 
 **Goal:** One class per domain entity covering all endpoints.
 
+> **Source of truth for routes and HTTP methods:** the complete route map in the [Dev Environment Reference](#dev-environment-reference-sales-portal) section and `sales-portal/backend/routers/`.
+
 ### Step 6.1 — `src/sales_portal_tests/api/api/login_api.py`
 
 - `LoginApi.__init__(self, client: ApiClient)`
-- `@allure.step("POST /api/login")`
-- `login(credentials: Credentials) -> Response[LoginResponse]`
+- Methods (all with `@allure.step`):
+  - `login(credentials: Credentials) -> Response` — `POST /api/login`
+  - `logout(token: str) -> Response` — `POST /api/logout`
 
 ### Step 6.2 — `src/sales_portal_tests/api/api/products_api.py`
 
 - `ProductsApi.__init__(self, client: ApiClient)`
 - Methods (all with `@allure.step`):
-  - `create(product: Product, token: str) -> Response[ProductResponse]`
-  - `update(id: str, product: Product, token: str) -> Response[ProductResponse]`
-  - `get_by_id(id: str, token: str) -> Response[ProductResponse]`
-  - `get_all(token: str) -> Response[ProductsResponse]`
-  - `delete(id: str, token: str) -> Response[None]`
+  - `create(product: Product, token: str) -> Response[ProductResponse]` — `POST /api/products`
+  - `update(id: str, product: Product, token: str) -> Response[ProductResponse]` — `PUT /api/products/:id`
+  - `get_by_id(id: str, token: str) -> Response[ProductResponse]` — `GET /api/products/:id`
+  - `get_all(token: str) -> Response[ProductsResponse]` — `GET /api/products/all`
+  - `get_all_sorted(token: str, **query_params) -> Response` — `GET /api/products` (supports `manufacturer`, `search`, `sortField`, `sortOrder` query params)
+  - `delete(id: str, token: str) -> Response[None]` — `DELETE /api/products/:id`
 
 ### Step 6.3 — `src/sales_portal_tests/api/api/customers_api.py`
 
 - `CustomersApi.__init__(self, client: ApiClient)`
-- Methods: `create`, `delete`, `get_list`, `get_all`, `get_by_id`, `update`
+- Methods: `create`, `update`, `get_by_id`, `get_all` (`/all`), `get_list` (sorted/filtered), `delete`, `get_customer_orders` (`/customers/:id/orders`)
 
 ### Step 6.4 — `src/sales_portal_tests/api/api/orders_api.py`
 
 - `OrdersApi.__init__(self, client: ApiClient)`
-- Methods: `create`, `get_by_id`, `get_all`, `update`, `delete`, `add_delivery`, `update_status`, `receive_products`, `assign_manager`, `unassign_manager`, `add_comment`, `get_comments`, `delete_comment`
+- Methods: `create` (POST), `get_by_id` (GET `:id`), `get_all` (GET), `update` (PUT `:id`), `delete` (DELETE `:id`), `add_delivery` (POST `:id/delivery`), `update_status` (PUT `:id/status`), `receive_products` (POST `:id/receive`), `assign_manager` (PUT `:orderId/assign-manager/:managerId`), `unassign_manager` (PUT `:orderId/unassign-manager`), `add_comment` (POST `:id/comments`), `delete_comment` (DELETE `:id/comments/:commentId`)
 
 ### Step 6.5 — `src/sales_portal_tests/api/api/notifications_api.py`
 
 - `NotificationsApi.__init__(self, client: ApiClient)`
-- Methods: `get_user_notifications`, `mark_as_read`, `mark_all_as_read`
+- Methods: `get_user_notifications` (GET `/notifications`), `mark_as_read` (PATCH `/notifications/:id/read`), `mark_all_as_read` (PATCH `/notifications/mark-all-read`)
 
-### Step 6.6 — Verification checkpoint
+### Step 6.6 — `src/sales_portal_tests/api/api/users_api.py`
+
+- `UsersApi.__init__(self, client: ApiClient)`
+- Methods: `get_users` (GET), `get_user` (GET `:id`), `create` (POST), `delete` (DELETE `:id`), `change_password` (PATCH `/password/:id`)
+
+### Step 6.7 — `src/sales_portal_tests/api/api/metrics_api.py`
+
+- `MetricsApi.__init__(self, client: ApiClient)`
+- Methods: `get_metrics` (GET `/metrics`)
+
+### Step 6.8 — Verification checkpoint
 
 ```bash
 mypy src/api/api/

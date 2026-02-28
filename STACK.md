@@ -1,7 +1,8 @@
 # Technology Stack & Architecture
 
 > **Project:** AQA_4_PROD_SALES_PORTAL — End-to-end test automation framework for the Sales Portal web application  
-> **Repository:** [github.com/DorityTM/AQA_4_PROD_SALES_PORTAL](https://github.com/DorityTM/AQA_4_PROD_SALES_PORTAL)
+> **Repository:** [github.com/DorityTM/AQA_4_PROD_SALES_PORTAL](https://github.com/DorityTM/AQA_4_PROD_SALES_PORTAL)  
+> **Dev environment:** [`sales-portal/`](./sales-portal/) — full backend (Express + MongoDB) + frontend (vanilla JS) + Docker Compose setup
 
 ---
 
@@ -24,6 +25,25 @@
 ## 1. Overview
 
 This project is a **Playwright + TypeScript** test-automation framework providing both **API** and **UI** test coverage for the Sales Portal product. It follows a multi-layered architecture separating low-level HTTP clients, business-level services, Page Objects, fixtures, data generation, and JSON-schema validation. Tests are organised by type (API / UI / integration) and tagged for selective execution (smoke, regression, etc.).
+
+### Application Under Test (`sales-portal/`)
+
+The Sales Portal development environment lives in the `sales-portal/` folder. Run it locally via Docker Compose:
+
+```bash
+cd sales-portal && docker-compose up --build
+```
+
+| Service       | URL                              | Notes                  |
+| ------------- | -------------------------------- | ---------------------- |
+| Frontend      | `http://localhost:8585`          | Vanilla JS SPA         |
+| Backend API   | `http://localhost:8686`          | Express + MongoDB      |
+| Swagger       | `http://localhost:8686/api/docs` | Full API documentation |
+| Mongo Express | `http://localhost:8081`          | DB admin (admin/admin) |
+
+Default admin credentials: `admin@example.com` / `admin123`
+
+The backend serves a REST API under `/api` with JWT Bearer auth covering: Auth, Products, Customers, Orders (+ delivery, status, receive, comments, manager assignment), Notifications, Metrics, Users, and Rebates. Real-time notifications use Socket.IO. Request validation uses JSON Schema middleware + per-field regex validation.
 
 ---
 
@@ -274,15 +294,15 @@ Tags are passed via Playwright's native `{ tag: [...] }` option.
 
 Loaded from `.env` (default) or `.env.dev` (when `TEST_ENV=dev`):
 
-| Variable               | Description                   |
-| ---------------------- | ----------------------------- |
-| `SALES_PORTAL_URL`     | UI base URL                   |
-| `SALES_PORTAL_API_URL` | API base URL                  |
-| `USER_NAME`            | Test user email               |
-| `USER_PASSWORD`        | Test user password            |
-| `MANAGER_IDS`          | JSON array of manager UUIDs   |
-| `TELEGRAM_BOT_TOKEN`   | (optional) Telegram bot token |
-| `TELEGRAM_CHAT_ID`     | (optional) Telegram chat ID   |
+| Variable               | Description                   | Local default (Docker Compose) |
+| ---------------------- | ----------------------------- | ------------------------------ |
+| `SALES_PORTAL_URL`     | UI base URL                   | `http://localhost:8585`        |
+| `SALES_PORTAL_API_URL` | API base URL                  | `http://localhost:8686`        |
+| `USER_NAME`            | Test user email               | `admin@example.com`            |
+| `USER_PASSWORD`        | Test user password            | `admin123`                     |
+| `MANAGER_IDS`          | JSON array of manager UUIDs   |                                |
+| `TELEGRAM_BOT_TOKEN`   | (optional) Telegram bot token |                                |
+| `TELEGRAM_CHAT_ID`     | (optional) Telegram chat ID   |                                |
 
 ### 7.2 TypeScript Configuration
 
@@ -301,10 +321,16 @@ Loaded from `.env` (default) or `.env.dev` (when `TEST_ENV=dev`):
 `src/config/apiConfig.ts` centralises all endpoint paths as a typed object with static strings and parameterised functions:
 
 ```
-/api/login, /api/products, /api/customers, /api/orders,
-/api/orders/{id}/delivery, /api/orders/{id}/status, /api/orders/{id}/receive,
-/api/orders/{id}/comments, /api/notifications, /api/metrics, /api/users
+/api/login, /api/logout, /api/products, /api/products/all, /api/products/:id,
+/api/customers, /api/customers/all, /api/customers/:id, /api/customers/:customerId/orders,
+/api/orders, /api/orders/:id, /api/orders/:id/delivery, /api/orders/:id/status,
+/api/orders/:id/receive, /api/orders/:id/comments, /api/orders/:id/comments/:commentId,
+/api/orders/:orderId/assign-manager/:managerId, /api/orders/:orderId/unassign-manager,
+/api/notifications, /api/notifications/:notificationId/read, /api/notifications/mark-all-read,
+/api/metrics, /api/users, /api/users/:id, /api/users/password/:id, /api/promocodes/:id
 ```
+
+> **Source of truth:** `sales-portal/backend/routers/` — see Swagger at `http://localhost:8686/api/docs` for the live interactive documentation.
 
 ---
 

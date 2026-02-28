@@ -2,6 +2,7 @@
 
 > **Project:** Sales Portal — End-to-end test automation framework (Python re-implementation)  
 > **Original (TypeScript):** see [`STACK.md`](./STACK.md)  
+> **Dev environment:** [`sales-portal/`](./sales-portal/) (Express + MongoDB backend, vanilla JS frontend, Docker Compose)  
 > **Goal:** Reproduce every capability of the TypeScript framework using **Python + pytest + Playwright**
 
 ---
@@ -26,6 +27,33 @@
 ## 1. Overview
 
 This project is a **pytest + Playwright for Python** test-automation framework providing both **API** and **UI** test coverage for the Sales Portal product. It preserves the same multi-layered, service-oriented architecture as the original TypeScript project — separating HTTP clients, business-level services, Page Objects, pytest fixtures, data generation, and JSON-schema validation — while leveraging Python-native idioms (dataclasses, type hints, pytest parametrize, context managers).
+
+### Application Under Test
+
+The Sales Portal is a full-stack web application located in the `sales-portal/` directory of this repository. It consists of:
+
+- **Backend:** Express.js + MongoDB (Mongoose), running on port 8686
+- **Frontend:** Vanilla JavaScript SPA, running on port 8585
+- **Database:** MongoDB 6.0, accessible via Mongo Express UI on port 8081
+
+**Local setup:**
+
+```bash
+cd sales-portal && docker-compose up --build
+```
+
+| URL                              | Description                          |
+| -------------------------------- | ------------------------------------ |
+| `http://localhost:8585`          | Frontend UI                          |
+| `http://localhost:8686`          | Backend API                          |
+| `http://localhost:8686/api/docs` | Swagger API documentation            |
+| `http://localhost:8081`          | Mongo Express DB admin (admin/admin) |
+
+**Default admin:** `admin@example.com` / `admin123`
+
+The backend exposes a REST API under `/api` with JWT Bearer token authentication. The API covers: **Auth** (login/logout), **Products** (CRUD + filtering/sorting), **Customers** (CRUD + filtering/sorting), **Orders** (CRUD + delivery + status transitions + receive + comments + manager assignment), **Notifications** (real-time via WebSocket + REST), **Metrics** (dashboard data), **Users** (CRUD + password change), and **Rebates** (promocodes).
+
+Real-time notifications are delivered via Socket.IO WebSocket. The backend validates all request bodies using JSON Schema middleware and per-field regex validation in custom middleware.
 
 ---
 
@@ -180,13 +208,17 @@ The framework preserves the same **multi-layer service-oriented architecture** a
 
 One class per domain entity, each accepting an `ApiClient` via `__init__`:
 
-| Module                 | Endpoints covered                                                                   |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `login_api.py`         | `POST /api/login`                                                                   |
-| `products_api.py`      | CRUD on `/api/products`                                                             |
-| `customers_api.py`     | CRUD + list/all on `/api/customers`                                                 |
-| `orders_api.py`        | CRUD, delivery, status, receive, assign/unassign manager, comments on `/api/orders` |
-| `notifications_api.py` | `/api/notifications`, mark-read                                                     |
+| Module                 | Endpoints covered                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `login_api.py`         | `POST /api/login`, `POST /api/logout`                                                                                       |
+| `products_api.py`      | CRUD on `/api/products` + `/api/products/all` (unfiltered) + sorted/filtered list via query params                          |
+| `customers_api.py`     | CRUD + `/api/customers/all` + sorted/filtered list + `/api/customers/:id/orders`                                            |
+| `orders_api.py`        | CRUD, delivery (POST), status (PUT), receive (POST), assign/unassign manager (PUT), comments (POST/DELETE) on `/api/orders` |
+| `notifications_api.py` | `GET /api/notifications`, `PATCH /:id/read`, `PATCH /mark-all-read`                                                         |
+| `users_api.py`         | `GET /api/users`, `GET /:id`, `POST` (register), `DELETE /:id`, `PATCH /password/:id`                                       |
+| `metrics_api.py`       | `GET /api/metrics`                                                                                                          |
+
+> **Source of truth:** `sales-portal/backend/routers/` — each router file documents exact routes, HTTP methods, parameters, and Swagger schemas.
 
 Every public method is decorated with `@allure.step("...")` for automatic reporting.
 
@@ -419,15 +451,17 @@ def test_add_delivery_positive(case, orders_api, admin_token, order):
 
 Loaded via `python-dotenv` from `.env` (default) or `.env.dev` (when `TEST_ENV=dev`):
 
-| Variable               | Description                   |
-| ---------------------- | ----------------------------- |
-| `SALES_PORTAL_URL`     | UI base URL                   |
-| `SALES_PORTAL_API_URL` | API base URL                  |
-| `USER_NAME`            | Test user email               |
-| `USER_PASSWORD`        | Test user password            |
-| `MANAGER_IDS`          | JSON array of manager UUIDs   |
-| `TELEGRAM_BOT_TOKEN`   | (optional) Telegram bot token |
-| `TELEGRAM_CHAT_ID`     | (optional) Telegram chat ID   |
+| Variable               | Description                   | Local default (Docker Compose) |
+| ---------------------- | ----------------------------- | ------------------------------ |
+| `SALES_PORTAL_URL`     | UI base URL                   | `http://localhost:8585`        |
+| `SALES_PORTAL_API_URL` | API base URL                  | `http://localhost:8686`        |
+| `USER_NAME`            | Test user email               | `admin@example.com`            |
+| `USER_PASSWORD`        | Test user password            | `admin123`                     |
+| `MANAGER_IDS`          | JSON array of manager UUIDs   |                                |
+| `TELEGRAM_BOT_TOKEN`   | (optional) Telegram bot token |                                |
+| `TELEGRAM_CHAT_ID`     | (optional) Telegram chat ID   |                                |
+
+> **Local dev setup:** Run `docker-compose up --build` in `sales-portal/` to start the application. Swagger docs are at `http://localhost:8686/api/docs`.
 
 ### 7.2 Configuration Module (`src/config/`)
 
@@ -447,19 +481,21 @@ MANAGER_IDS: list[str] = json.loads(os.environ["MANAGER_IDS"])
 ```python
 # src/sales_portal_tests/config/api_config.py
 # Module-level constants and plain functions — not a class with static methods.
+# Derived from actual backend routes in sales-portal/backend/routers/
 from sales_portal_tests.config.env import SALES_PORTAL_API_URL
 
 BASE_URL = SALES_PORTAL_API_URL
 
 # Static endpoints (module constants)
 LOGIN = f"{BASE_URL}/api/login"
+LOGOUT = f"{BASE_URL}/api/logout"
 PRODUCTS = f"{BASE_URL}/api/products"
 PRODUCTS_ALL = f"{BASE_URL}/api/products/all"
 CUSTOMERS = f"{BASE_URL}/api/customers"
 CUSTOMERS_ALL = f"{BASE_URL}/api/customers/all"
 ORDERS = f"{BASE_URL}/api/orders"
-ORDERS_ALL = f"{BASE_URL}/api/orders/all"
 NOTIFICATIONS = f"{BASE_URL}/api/notifications"
+NOTIFICATIONS_MARK_ALL_READ = f"{BASE_URL}/api/notifications/mark-all-read"
 METRICS = f"{BASE_URL}/api/metrics"
 USERS = f"{BASE_URL}/api/users"
 
@@ -469,6 +505,9 @@ def product_by_id(product_id: str) -> str:
 
 def customer_by_id(customer_id: str) -> str:
     return f"{CUSTOMERS}/{customer_id}"
+
+def customer_orders(customer_id: str) -> str:
+    return f"{CUSTOMERS}/{customer_id}/orders"
 
 def order_by_id(order_id: str) -> str:
     return f"{ORDERS}/{order_id}"
@@ -484,6 +523,27 @@ def order_receive(order_id: str) -> str:
 
 def order_comments(order_id: str) -> str:
     return f"{ORDERS}/{order_id}/comments"
+
+def order_comment_by_id(order_id: str, comment_id: str) -> str:
+    return f"{ORDERS}/{order_id}/comments/{comment_id}"
+
+def assign_manager(order_id: str, manager_id: str) -> str:
+    return f"{ORDERS}/{order_id}/assign-manager/{manager_id}"
+
+def unassign_manager(order_id: str) -> str:
+    return f"{ORDERS}/{order_id}/unassign-manager"
+
+def notification_read(notification_id: str) -> str:
+    return f"{NOTIFICATIONS}/{notification_id}/read"
+
+def user_by_id(user_id: str) -> str:
+    return f"{USERS}/{user_id}"
+
+def user_password(user_id: str) -> str:
+    return f"{USERS}/password/{user_id}"
+
+def promocode_by_name(name: str) -> str:
+    return f"{BASE_URL}/api/promocodes/{name}"
 # ... etc
 ```
 
@@ -759,7 +819,9 @@ sales-portal-tests-python/
 │   │   │   ├── products_api.py
 │   │   │   ├── customers_api.py
 │   │   │   ├── orders_api.py
-│   │   │   └── notifications_api.py
+│   │   │   ├── notifications_api.py
+│   │   │   ├── users_api.py
+│   │   │   └── metrics_api.py
 │   │   ├── service/                   # Business-level API services
 │   │   │   ├── __init__.py
 │   │   │   ├── login_service.py

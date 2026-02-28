@@ -43,8 +43,10 @@ testpaths = ["tests"]
 markers = [
     "smoke: critical-path tests",
     "regression: full regression suite",
+    "integration: UI + mock integration tests (no real backend required)",
     "api: API tests",
     "ui: UI tests",
+    "e2e: end-to-end tests",
     "auth: authentication-related tests",
     "products: product-related tests",
     "customers: customer-related tests",

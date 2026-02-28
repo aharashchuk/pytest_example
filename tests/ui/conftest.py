@@ -1,8 +1,7 @@
-"""UI conftest.py — authenticated browser context, page/service fixtures, cleanup."""
+"""UI conftest.py — authenticated browser context, page/service fixtures."""
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -10,9 +9,6 @@ from urllib.parse import urlparse
 import pytest
 from playwright.sync_api import Page
 
-from sales_portal_tests.api.service.login_service import LoginService
-from sales_portal_tests.api.service.orders_service import OrdersApiService
-from sales_portal_tests.api.service.stores.entities_store import EntitiesStore
 from sales_portal_tests.config.env import SALES_PORTAL_URL
 from sales_portal_tests.mock.mock import Mock
 from sales_portal_tests.ui.pages.customers.add_new_customer_page import AddNewCustomerPage
@@ -44,41 +40,47 @@ _AUTH_STATE_PATH = Path("src/.auth/user.json")
 
 
 @pytest.fixture(scope="session")
-def storage_state_path(browser_type_launch_args: dict[str, Any], admin_token: str) -> str:
+def storage_state_path(
+    playwright: Any,
+    browser_type_launch_args: dict[str, Any],
+    admin_token: str,
+) -> str:
     """Perform a real UI login once per session and persist the storage state.
 
     The stored cookies/localStorage are reused by every browser context in
     the session so each test starts already authenticated.
 
+    Uses the ``playwright`` fixture provided by pytest-playwright so that
+    this fixture runs inside the same event loop and avoids the
+    "Sync API inside asyncio loop" error from pytest-playwright ≥ 0.5.
+
     Args:
+        playwright: The pytest-playwright session-scoped Playwright instance.
         browser_type_launch_args: Launch kwargs forwarded from pytest-playwright.
         admin_token: Bearer token obtained from the API login (session-scoped).
 
     Returns:
         Path to the saved ``storage_state`` JSON file.
     """
-    from playwright.sync_api import sync_playwright
-
     url = urlparse(SALES_PORTAL_URL)
     hostname = url.hostname or "localhost"
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(**browser_type_launch_args)
-        ctx = browser.new_context()
-        ctx.add_cookies(
-            [
-                {
-                    "name": "Authorization",
-                    "value": admin_token,
-                    "domain": hostname,
-                    "path": "/",
-                }
-            ]
-        )
-        _AUTH_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        ctx.storage_state(path=str(_AUTH_STATE_PATH))
-        ctx.close()
-        browser.close()
+    browser = playwright.chromium.launch(**browser_type_launch_args)
+    ctx = browser.new_context()
+    ctx.add_cookies(
+        [
+            {
+                "name": "Authorization",
+                "value": admin_token,
+                "domain": hostname,
+                "path": "/",
+            }
+        ]
+    )
+    _AUTH_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ctx.storage_state(path=str(_AUTH_STATE_PATH))
+    ctx.close()
+    browser.close()
 
     return str(_AUTH_STATE_PATH)
 
@@ -235,36 +237,3 @@ def comments_ui_service(page: Page) -> CommentsUIService:
 def mock(page: Page) -> Mock:
     """Fresh :class:`Mock` helper for network interception in integration tests."""
     return Mock(page)
-
-
-# ---------------------------------------------------------------------------
-# Per-test cleanup (function-scoped)
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def cleanup(orders_service: OrdersApiService, login_service: LoginService) -> Generator[EntitiesStore, None, None]:
-    """Yield a fresh :class:`EntitiesStore`; auto-delete all tracked entities in teardown.
-
-    Mirrors the API-level cleanup fixture so UI tests can provision data via
-    API services and still get deterministic cleanup.
-
-    Usage inside a test::
-
-        def test_something(cleanup, orders_service, admin_token):
-            order = orders_service.create_order_and_entities(admin_token)
-            cleanup.orders.add(order.id)
-            # ... assertions ...
-        # teardown: all tracked orders/customers/products are deleted automatically
-
-    Note:
-        ``orders_service`` and ``login_service`` are inherited from
-        ``tests/conftest.py`` and ``tests/api/conftest.py`` automatically — no
-        explicit import is required here.
-    """
-    store = EntitiesStore()
-    orders_service.entities_store = store
-    yield store
-    token = login_service.login_as_admin()
-    orders_service.full_delete(token)
-    store.clear()

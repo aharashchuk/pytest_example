@@ -1,7 +1,12 @@
 """Root conftest.py — session-scoped infrastructure fixtures shared by all tests."""
 
-from collections.abc import Generator
+from __future__ import annotations
 
+import os
+from collections.abc import Generator
+from pathlib import Path
+
+import allure
 import pytest
 from playwright.sync_api import APIRequestContext, Playwright
 
@@ -124,3 +129,70 @@ def cleanup(orders_service: OrdersApiService, login_service: LoginService) -> Ge
     token = login_service.login_as_admin()
     orders_service.full_delete(token)
     store.clear()
+
+
+# ---------------------------------------------------------------------------
+# Allure reporting hooks
+# ---------------------------------------------------------------------------
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int | pytest.ExitCode) -> None:
+    """Pytest hook — runs once after the entire test session.
+
+    Writes ``allure-results/environment.properties`` so the Allure report
+    shows the target environment (URL, env name) on the **Environment** tab.
+
+    Args:
+        session:    The pytest session object.
+        exitstatus: Integer exit code (0 = all passed).
+    """
+    from sales_portal_tests.config.env import SALES_PORTAL_API_URL, SALES_PORTAL_URL
+
+    allure_dir = Path("allure-results")
+    allure_dir.mkdir(exist_ok=True)
+    env_name = os.getenv("TEST_ENV", "default")
+    (allure_dir / "environment.properties").write_text(
+        f"ENV={env_name}\n" f"UI_URL={SALES_PORTAL_URL}\n" f"API_URL={SALES_PORTAL_API_URL}\n",
+        encoding="utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Screenshot-on-failure hook (UI tests only)
+# ---------------------------------------------------------------------------
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None, None, None]:
+    """Attach a screenshot to Allure whenever a UI test step fails.
+
+    The hook checks for the ``page`` fixture inside the test's ``funcargs``
+    dictionary.  If the test has access to a Playwright ``Page`` and the
+    **call** phase (i.e. the test body itself, not setup/teardown) fails,
+    a PNG screenshot is captured and attached to the Allure report.
+
+    Args:
+        item: The pytest test item being executed.
+        call: Information about the current test phase (setup / call / teardown).
+    """
+    import pluggy
+
+    outcome: pluggy.Result[pytest.TestReport] = yield  # type: ignore[assignment]
+    report: pytest.TestReport = outcome.get_result()
+
+    funcargs: dict[str, object] = getattr(item, "funcargs", {})
+    if report.failed and call.when == "call" and "page" in funcargs:
+        page = funcargs["page"]
+        try:
+            from playwright.sync_api import Page as PlaywrightPage
+
+            if isinstance(page, PlaywrightPage):
+                screenshot_bytes: bytes = page.screenshot(full_page=True)
+                allure.attach(
+                    screenshot_bytes,
+                    name="screenshot",
+                    attachment_type=allure.attachment_type.PNG,
+                )
+        except Exception:
+            # Never let a reporting failure break the test run
+            pass

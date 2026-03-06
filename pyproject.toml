@@ -13,7 +13,6 @@ dependencies = [
     "pymongo>=4.10",
     "python-dotenv>=1.1",
     "python-dateutil>=2.9",
-    "python-telegram-bot>=21.0",
     "allure-pytest>=2.13",
     "allure-python-commons>=2.13",
     "pytest-rerunfailures>=14.0",
